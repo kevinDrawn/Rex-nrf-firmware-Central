@@ -1,0 +1,47 @@
+{
+    "files.associations": {
+        "types.h": "c",
+        "stdint.h": "c",
+        "byteorder.h": "c",
+        "nrfx_saadc.h": "c",
+        "uuid.h": "c",
+        "adc_sampler.h": "c",
+        "uart_bridge.h": "c",
+        "can.h": "c",
+        "log.h": "c",
+        "printk.h": "c",
+        "kernel.h": "c",
+        "compare": "c",
+        "float.h": "c",
+        "filter.h": "c",
+        "stdbool.h": "c",
+        "motor_control.h": "c",
+        "bit": "c",
+        "cstddef": "c",
+        "string": "c",
+        "limits": "c",
+        "memory": "c",
+        "new": "c",
+        "functional": "c",
+        "nrfx_dppi.h": "c",
+        "atomic.h": "c",
+        "ble.h": "c",
+        "gpio.h": "c",
+        "nrfx_ppi.h": "c",
+        "math.h": "c",
+        "stdio.h": "c",
+        "stdlib.h": "c",
+        "esb_rx.h": "c",
+        "filter_central.h": "c",
+        "devicetree.h": "c",
+        "esb.h": "c",
+        "device.h": "c",
+        "torque_cyl.h": "c"
+    },
+    "nrf-connect.applications": [
+        "${workspaceFolder}"
+    ],
+    "nrf-connect.debugging.bindings": {
+        "${workspaceFolder}/build/central_multilink": "Launch central_multilink"
+    }
+}

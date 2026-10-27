@@ -1,0 +1,48 @@
+#
+# Copyright (c) 2020 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+source "Kconfig.zephyr"
+menu "Enhanced ShockBurst: Receiver"
+
+config ESB_PRX_APP_LOG_LEVEL
+	int "Log level for the ESB PRX sample"
+	default 4
+
+endmenu
+
+menu "Custom SAADC Modes"
+
+config HALL_MODE
+    bool "Enable Hall sensor mode"
+    default n
+    help
+      Enable this to use Hall_L and Hall_R channels for SAADC.
+
+config CAN_MODE
+    bool "Enable CAN sensor mode"
+    default n
+    help
+      Enable this to use Can_L and Can_R channels for SAADC.
+
+config EMG_MODE
+    bool "Enable EMG sensor mode"
+    default n
+    help
+      Enable this to use Sequence, Tibial Muscle, Gastrocnemius Muscle channels for SPI DRDY.
+
+config CONTRALATERAL_MODE
+    bool "Enable CONTRALATERAL_MODE"
+    default n
+    help
+      Enable this to use Contralateral Mode.
+
+config FIXED_MODE
+    bool "Enable FIXED_MODE"
+    default n
+    help
+      Enable this to use Fixed trajectory mode.
+
+endmenu

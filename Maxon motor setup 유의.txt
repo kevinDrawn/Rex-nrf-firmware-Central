@@ -1,0 +1,1 @@
+Interpolation time period를 5 ms로 설정했다. (계속 타임 싱크가 맞지 않는 에러가 발생해서...)
