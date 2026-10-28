@@ -161,7 +161,7 @@ extern float Nominal_K;
 #define LOG_BATCH_EMG      20   // 2 kHz * 10 ms
 
 #define LOG_EXO_CHANNEL    6    // qL, qR, qMirror, torque_axis, torque_can_L, torque_can_R
-#define LOG_EMG_CHANNEL    2    // Tibialis, Gastrocnemius
+#define LOG_EMG_CHANNEL    4    // L_TB, L_GT, R_TB, R_GT
 
 #if defined(CONFIG_CONTRALATERAL_MODE)
 // Gait Trajectory
@@ -187,7 +187,8 @@ typedef struct
     /* ============================================
      * EMG Variables
      * ============================================ */
-    int32_t L_TB_1, L_TB_2, L_GT_1, L_GT_2;    
+    int32_t L_TB_1, L_TB_2, L_GT_1, L_GT_2;
+    int32_t R_TB_1, R_TB_2, R_GT_1, R_GT_2;
 
     /* ============================================
      * Peak Detection (Right Joint)

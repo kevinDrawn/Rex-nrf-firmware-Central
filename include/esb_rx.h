@@ -17,7 +17,8 @@
 
 #define RX_BUFFER_SIZE 1000
 
-#define DATA_LENGTH 28
+#define DATA_LENGTH 24
+#define BILATERAL_DATA_LENGTH 36
 #define PAYLOAD_FLAG_EMG_UNDERFLOW      BIT(0)
 #define PAYLOAD_FLAG_EMG_SEQUENCE_ERROR BIT(1)
 
@@ -31,6 +32,12 @@ extern volatile int32_t esb_tb_emg_1;
 extern volatile int32_t esb_gt_emg_1;
 extern volatile int32_t esb_tb_emg_2;
 extern volatile int32_t esb_gt_emg_2;
+
+/* Right-side EMG; zero when receiving a unilateral packet. */
+extern volatile int32_t esb_r_tb_emg_1;
+extern volatile int32_t esb_r_gt_emg_1;
+extern volatile int32_t esb_r_tb_emg_2;
+extern volatile int32_t esb_r_gt_emg_2;
 
 extern volatile bool esb_angle_ready;
 

@@ -23,9 +23,11 @@
 
 #define FRAME_HEADER_LEN 4
 
+/* EMG blocks: L_TB, L_GT, R_TB, R_GT; signed 24-bit big-endian. */
+#define EMG_WIRE_SAMPLE_BYTES 3
 #define PAYLOAD_LEN \
     (LOG_BATCH_EXO * 6 * sizeof(int16_t) + \
-     LOG_BATCH_EMG * 2 * sizeof(int32_t))
+     LOG_BATCH_EMG * LOG_EMG_CHANNEL * EMG_WIRE_SAMPLE_BYTES)
 
 #define FRAME_LEN (FRAME_HEADER_LEN + PAYLOAD_LEN)
 

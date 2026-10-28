@@ -71,6 +71,20 @@ static int16_t log_torque_can_R[LOG_BATCH_EXO];
 
 static int32_t log_tb_emg[LOG_BATCH_EMG];
 static int32_t log_gt_emg[LOG_BATCH_EMG];
+static int32_t log_r_tb_emg[LOG_BATCH_EMG];
+static int32_t log_r_gt_emg[LOG_BATCH_EMG];
+
+/* Keep full signed samples in RAM; serialize only their lower 24 bits. */
+static void put_emg_i24_be(uint8_t *dst, const int32_t *samples)
+{
+    for (size_t i = 0; i < LOG_BATCH_EMG; ++i) {
+        uint32_t value = (uint32_t)samples[i];
+        dst[0] = (uint8_t)(value >> 16);
+        dst[1] = (uint8_t)(value >> 8);
+        dst[2] = (uint8_t)value;
+        dst += EMG_WIRE_SAMPLE_BYTES;
+    }
+}
 
 static uint8_t exo_sample_count = 0;
 static uint8_t emg_sample_count = 0;
@@ -117,6 +131,10 @@ motor_control_state_t mc = {
     .L_TB_2 = 0.0f,
     .L_GT_1 = 0.0f,
     .L_GT_2 = 0.0f,
+    .R_TB_1 = 0,
+    .R_GT_1 = 0,
+    .R_TB_2 = 0,
+    .R_GT_2 = 0,
 
     /* ============================================
      * Peak Detection
@@ -291,6 +309,101 @@ static inline uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi){
     return v;
 }
 
+/* Shared by the UART test and the main control loop. */
+static void collect_log_samples(void)
+{
+    bool do_sampling = ((mc.time % 1) == 0); // 1 kHz
+
+    /* ===== 1 kHz Sampling ===== */
+    if (do_sampling) {
+        if (exo_sample_count < LOG_BATCH_EXO) {
+            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 100.0f);
+            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 100.0f);
+            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 100.0f);
+            log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
+
+            log_torque_can_L[exo_sample_count] =
+                (int16_t)(mc.torque_can_left * 10000.0f);
+            log_torque_can_R[exo_sample_count] =
+                (int16_t)(mc.torque_can_right * 10000.0f);
+            exo_sample_count++;
+        }
+
+        if ((emg_sample_count + 1) < LOG_BATCH_EMG) {
+            log_tb_emg[emg_sample_count] = mc.L_TB_1;
+            log_gt_emg[emg_sample_count] = mc.L_GT_1;
+            log_r_tb_emg[emg_sample_count] = mc.R_TB_1;
+            log_r_gt_emg[emg_sample_count] = mc.R_GT_1;
+            emg_sample_count++;
+
+            log_tb_emg[emg_sample_count] = mc.L_TB_2;
+            log_gt_emg[emg_sample_count] = mc.L_GT_2;
+            log_r_tb_emg[emg_sample_count] = mc.R_TB_2;
+            log_r_gt_emg[emg_sample_count] = mc.R_GT_2;
+            emg_sample_count++;
+        }
+    }
+}
+
+static void send_log_frame_if_ready(uint32_t *drop_count)
+{
+    /* ===== 10ms 패킹 ===== */
+    if ((mc.time % 10) == 0) {
+
+        if (exo_sample_count != LOG_BATCH_EXO || emg_sample_count != LOG_BATCH_EMG) {
+            return;
+        }
+
+        uint8_t frame[FRAME_LEN];
+        size_t off = 0;
+
+        frame[off++] = 0xAA;
+        frame[off++] = 0x55;
+
+        uint16_t payload_len = 0;
+
+        payload_len += LOG_BATCH_EXO * 4 * sizeof(int16_t); // qL, qR, qMirror, torque_axis
+        payload_len += LOG_BATCH_EXO * 2 * sizeof(int16_t); // torque CAN L/R
+        payload_len += LOG_BATCH_EMG * LOG_EMG_CHANNEL * EMG_WIRE_SAMPLE_BYTES; // L/R TB/GT EMG
+
+        frame[off++] = payload_len & 0xFF;
+        frame[off++] = (payload_len >> 8) & 0xFF;
+
+        memcpy(&frame[off], log_qL, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+        memcpy(&frame[off], log_qR, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+        memcpy(&frame[off], log_qMirror, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+        memcpy(&frame[off], log_torque, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+
+        memcpy(&frame[off], log_torque_can_L, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+        memcpy(&frame[off], log_torque_can_R, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
+
+        put_emg_i24_be(&frame[off], log_tb_emg);
+        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
+        put_emg_i24_be(&frame[off], log_gt_emg);
+        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
+        put_emg_i24_be(&frame[off], log_r_tb_emg);
+        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
+        put_emg_i24_be(&frame[off], log_r_gt_emg);
+        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
+
+        int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
+        if (rc == 0) {
+            uart_tx_kick();
+        } else {
+            // UART TX queue full
+            if (drop_count != NULL) {
+                (*drop_count)++;
+                if ((*drop_count % 100) == 1) {
+                    LOG_WRN("UART TX queue full, dropped=%d", *drop_count);
+                }
+            }
+        }
+
+        exo_sample_count = 0;
+        emg_sample_count = 0;
+    }
+}
+
 void UART_Test_step(void){
 
     static int16_t test_count = 0;
@@ -313,86 +426,18 @@ void UART_Test_step(void){
     mc.L_GT_1 =  esb_gt_emg_1;
     mc.L_TB_2 =  esb_tb_emg_2;
     mc.L_GT_2 =  esb_gt_emg_2;
+    mc.R_TB_1 = esb_r_tb_emg_1;
+    mc.R_GT_1 = esb_r_gt_emg_1;
+    mc.R_TB_2 = esb_r_tb_emg_2;
+    mc.R_GT_2 = esb_r_gt_emg_2;
 
     mc.time += (int)(SAMPLING_INTERVAL * 1000);
-    bool do_sampling = ((mc.time % 1) == 0); // 1 kHz
-
-    /* ===== 1 kHz Sampling ===== */
-    if (do_sampling) {
-        if (exo_sample_count < LOG_BATCH_EXO) {
-            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 100.0f);
-            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 100.0f);
-            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 100.0f);
-            log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
-
-            log_torque_can_L[exo_sample_count] =
-                (int16_t)(mc.torque_can_left * 10000.0f);
-            log_torque_can_R[exo_sample_count] =
-                (int16_t)(mc.torque_can_right * 10000.0f);
-            exo_sample_count++;
-        }
-
-        if ((emg_sample_count + 1) < LOG_BATCH_EMG) {
-            log_tb_emg[emg_sample_count] = mc.L_TB_1;
-            log_gt_emg[emg_sample_count] = mc.L_GT_1;
-            emg_sample_count++;
-
-            log_tb_emg[emg_sample_count] = mc.L_TB_2;
-            log_gt_emg[emg_sample_count] = mc.L_GT_2;
-            emg_sample_count++;
-        }
-    }
-
-    /* ===== 10ms 패킹 ===== */
-    if ((mc.time % 10) == 0) {
-
-        if (exo_sample_count != LOG_BATCH_EXO || emg_sample_count != LOG_BATCH_EMG) {
-            return;
-        }
-
-        uint8_t frame[FRAME_LEN];
-        size_t off = 0;
-
-        frame[off++] = 0xAA;
-        frame[off++] = 0x55;
-
-        uint16_t payload_len = 0;
-
-        payload_len += LOG_BATCH_EXO * 4 * sizeof(int16_t); // qL, qR, qMirror, torque_axis
-        payload_len += LOG_BATCH_EXO * 2 * sizeof(int16_t); // torque CAN L/R
-        payload_len += LOG_BATCH_EMG * 2 * sizeof(int32_t); // TB/GT EMG
-
-        frame[off++] = payload_len & 0xFF;
-        frame[off++] = (payload_len >> 8) & 0xFF;
-
-        memcpy(&frame[off], log_qL, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qR, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qMirror, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        memcpy(&frame[off], log_torque_can_L, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque_can_R, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        memcpy(&frame[off], log_tb_emg, LOG_BATCH_EMG * sizeof(int32_t)); off += LOG_BATCH_EMG * sizeof(int32_t);
-        memcpy(&frame[off], log_gt_emg, LOG_BATCH_EMG * sizeof(int32_t)); off += LOG_BATCH_EMG * sizeof(int32_t);
-
-        int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
-        if (rc == 0) {
-            uart_tx_kick();
-        } else {
-            // UART TX queue full
-            uart_frame_drop_count++;
-            if ((uart_frame_drop_count % 100) == 1) {
-                LOG_WRN("UART TX queue full, dropped=%d", uart_frame_drop_count);
-            }
-        }
-
-        exo_sample_count = 0;
-        emg_sample_count = 0;
-    }
+    collect_log_samples();
+    send_log_frame_if_ready(&uart_frame_drop_count);
 }
 
-void Mirror_complinace_control_step(const struct device *can_dev){
+static void update_control_sensors(void)
+{
     
     // 몇초동안 필터링 안정화한 후에 Position Limitation 수행
     mc.q_L = esb_qL;
@@ -427,7 +472,15 @@ void Mirror_complinace_control_step(const struct device *can_dev){
     
     mc.L_TB_2 =  esb_tb_emg_2;
     mc.L_GT_2 =  esb_gt_emg_2;
+    mc.R_TB_1 = esb_r_tb_emg_1;
+    mc.R_GT_1 = esb_r_gt_emg_1;
+    mc.R_TB_2 = esb_r_tb_emg_2;
+    mc.R_GT_2 = esb_r_gt_emg_2;
     
+}
+
+static void prepare_compliance_state(void)
+{
     // // Compliance
     float torque_scale = esb_torque_L * 1.0;
     Nominal_I = 2 * (1e-6f);
@@ -453,6 +506,10 @@ void Mirror_complinace_control_step(const struct device *can_dev){
     Filter_Low_pass(&mc.dot_filter_L, mc.q_dot_L);
     Filter_Low_pass(&mc.dot_filter_R, mc.q_dot_R);
 
+}
+
+static void update_control_initialization(void)
+{
     // Filter 안정화를 위한 조치
     /* ===== 초기 500ms 안정화 이후 control_init 1회만 실행 ===== */
     if (!control_initialized && mc.time >= INIT_DELAY_MS) {
@@ -462,6 +519,10 @@ void Mirror_complinace_control_step(const struct device *can_dev){
         mc.time_start = mc.time;
     }
 
+}
+
+static float compute_control_velocity(void)
+{
 #if defined(CONFIG_CONTRALATERAL_MODE)
     // // Motor Control - Trajectory Mode
     // float df = f_target - f_cur;
@@ -615,7 +676,11 @@ void Mirror_complinace_control_step(const struct device *can_dev){
     // Command_vel Clamping
 	float command_vel_float = Kp_fixed * (mc.q_L - mc.q_fixed) + Kd_fixed * (mc.q_dot_L - mc.q_dot_fixed);
 #endif
+    return command_vel_float;
+}
 
+static float limit_control_velocity(float command_vel_float)
+{
 	// Velocity Damping Saturation
 	float q_remain_UP = mc.max_limit - mc.ticks_diff;
 	float q_dot_max;
@@ -659,7 +724,11 @@ void Mirror_complinace_control_step(const struct device *can_dev){
     if (isnan(command_vel_float) || isinf(command_vel_float)) {
         command_vel_float = 0;
     }
+    return command_vel_float;
+}
 
+static void send_motor_command(float command_vel_float)
+{
     // Int 변환
     int32_t cmd_vel_init =  (int32_t)command_vel_float;
 
@@ -672,6 +741,11 @@ void Mirror_complinace_control_step(const struct device *can_dev){
         // pack_pdo_CSV(&tx, COB_ID_PDO3_RX + 1, 0);  // velocity = 200 rpm
 	    // send_frame(&tx);   // 너가 이미 만든 can_send() 래퍼
     }
+
+}
+
+static void advance_control_state(void)
+{
     
 	/* Exo-skeleton Motor Position */
 	mc.ticks_diff = actual_position - mc.initial_ticks_adm;
@@ -681,75 +755,24 @@ void Mirror_complinace_control_step(const struct device *can_dev){
 	mc.q_prev_R = mc.q_R;
 
     mc.time += (int)(SAMPLING_INTERVAL * 1000);
-    bool do_sampling = ((mc.time % 1) == 0); // 1 kHz
+}
 
-    /* ===== 1 kHz Sampling ===== */
-    if (do_sampling) {
-        if (exo_sample_count < LOG_BATCH_EXO) {
-            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 100.0f);
-            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 100.0f);
-            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 100.0f);
-            log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
-            log_torque_can_L[exo_sample_count] =
-                (int16_t)(mc.torque_can_left * 10000.0f);
-            log_torque_can_R[exo_sample_count] =
-                (int16_t)(mc.torque_can_right * 10000.0f);
-            exo_sample_count++;
-        }
+void Mirror_complinace_control_step(const struct device *can_dev)
+{
+    /* CAN transmission uses the existing send_frame() device binding. */
+    (void)can_dev;
 
-        if ((emg_sample_count + 1) < LOG_BATCH_EMG) {
-            log_tb_emg[emg_sample_count] = mc.L_TB_1;
-            log_gt_emg[emg_sample_count] = mc.L_GT_1;
-            emg_sample_count++;
+    update_control_sensors();
+    prepare_compliance_state();
+    update_control_initialization();
 
-            log_tb_emg[emg_sample_count] = mc.L_TB_2;
-            log_gt_emg[emg_sample_count] = mc.L_GT_2;
-            emg_sample_count++;
-        }
-    }
+    float command_velocity = compute_control_velocity();
+    command_velocity = limit_control_velocity(command_velocity);
+    send_motor_command(command_velocity);
 
-    /* ===== 10ms 패킹 ===== */
-    if ((mc.time % 10) == 0) {
-
-        if (exo_sample_count != LOG_BATCH_EXO || emg_sample_count != LOG_BATCH_EMG) {
-            return;
-        }
-
-        uint8_t frame[FRAME_LEN];
-        size_t off = 0;
-
-        frame[off++] = 0xAA;
-        frame[off++] = 0x55;
-
-        uint16_t payload_len = 0;
-
-        payload_len += LOG_BATCH_EXO * 4 * sizeof(int16_t); // qL, qR, qMirror, torque_axis
-        payload_len += LOG_BATCH_EXO * 2 * sizeof(int16_t); // torque CAN L/R
-        payload_len += LOG_BATCH_EMG * 2 * sizeof(int32_t); // TB/GT EMG
-
-        frame[off++] = payload_len & 0xFF;
-        frame[off++] = (payload_len >> 8) & 0xFF;
-
-        memcpy(&frame[off], log_qL, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qR, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qMirror, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        memcpy(&frame[off], log_torque_can_L, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque_can_R, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        memcpy(&frame[off], log_tb_emg, LOG_BATCH_EMG * sizeof(int32_t)); off += LOG_BATCH_EMG * sizeof(int32_t);
-        memcpy(&frame[off], log_gt_emg, LOG_BATCH_EMG * sizeof(int32_t)); off += LOG_BATCH_EMG * sizeof(int32_t);
-
-        int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
-        if (rc == 0) {
-            uart_tx_kick();
-        } else {
-        }
-
-        exo_sample_count = 0;
-        emg_sample_count = 0;
-    }
+    advance_control_state();
+    collect_log_samples();
+    send_log_frame_if_ready(NULL);
 }
 
 // Position Limit

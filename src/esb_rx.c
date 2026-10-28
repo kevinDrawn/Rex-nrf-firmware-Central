@@ -13,10 +13,16 @@ volatile float esb_qR = 0.0f;
 volatile float esb_torque_L = 0.0f;
 volatile float esb_torque_R = 0.0f;
 
-volatile int32_t esb_tb_emg_1 = 0.0f;
-volatile int32_t esb_gt_emg_1 = 0.0f;
-volatile int32_t esb_tb_emg_2 = 0.0f;
-volatile int32_t esb_gt_emg_2 = 0.0f;
+volatile int32_t esb_tb_emg_1 = 0;
+volatile int32_t esb_gt_emg_1 = 0;
+volatile int32_t esb_tb_emg_2 = 0;
+volatile int32_t esb_gt_emg_2 = 0;
+
+/* Right-side samples are zero for unilateral packets. */
+volatile int32_t esb_r_tb_emg_1 = 0;
+volatile int32_t esb_r_gt_emg_1 = 0;
+volatile int32_t esb_r_tb_emg_2 = 0;
+volatile int32_t esb_r_gt_emg_2 = 0;
 
 static volatile uint32_t esb_rx_count = 0;
 static volatile uint32_t esb_rx_underflow_count = 0;
@@ -37,17 +43,14 @@ static inline int16_t bytes_to_i16(uint8_t high, uint8_t low)
     return (int16_t)((high << 8) | low);
 }
 
-static inline int32_t bytes_to_i32(uint8_t b0,
-                                   uint8_t b1,
-                                   uint8_t b2,
-                                   uint8_t b3)
+static inline int32_t bytes_to_i24_be(const uint8_t *data)
 {
-    uint32_t v = ((uint32_t)b0 << 24) |
-                 ((uint32_t)b1 << 16) |
-                 ((uint32_t)b2 << 8)  |
-                 ((uint32_t)b3);
+    uint32_t value = ((uint32_t)data[0] << 16) |
+                     ((uint32_t)data[1] << 8) |
+                     (uint32_t)data[2];
 
-    return (int32_t)v;
+    /* Sign-extend the ADS1294 two's-complement 24-bit sample. */
+    return (int32_t)(value ^ 0x800000U) - 0x800000;
 }
 
 float deg2rad(float deg){
@@ -79,8 +82,9 @@ static void event_handler(struct esb_evt const *event)
 case ESB_EVENT_RX_RECEIVED:
     while (esb_read_rx_payload(&rx_payload) == 0) {
 
-        if (rx_payload.length < DATA_LENGTH) {
-            LOG_ERR("Payload too short! len=%d", rx_payload.length);
+        if (rx_payload.length != DATA_LENGTH &&
+            rx_payload.length != BILATERAL_DATA_LENGTH) {
+            LOG_ERR("Invalid payload length! len=%d", rx_payload.length);
             continue;
         }
 
@@ -95,30 +99,6 @@ case ESB_EVENT_RX_RECEIVED:
 		int16_t L_torque = bytes_to_i16(rx_payload.data[8], rx_payload.data[9]);
 		int16_t R_torque = bytes_to_i16(rx_payload.data[10], rx_payload.data[11]);
 
-		int32_t TB_EMG_1 =
-			bytes_to_i32(rx_payload.data[12],
-						rx_payload.data[13],
-						rx_payload.data[14],
-						rx_payload.data[15]);
-
-		int32_t GT_EMG_1 =
-			bytes_to_i32(rx_payload.data[16],
-						rx_payload.data[17],
-						rx_payload.data[18],
-						rx_payload.data[19]);
-
-		int32_t TB_EMG_2 =
-			bytes_to_i32(rx_payload.data[20],
-						rx_payload.data[21],
-						rx_payload.data[22],
-						rx_payload.data[23]);
-
-		int32_t GT_EMG_2 =
-			bytes_to_i32(rx_payload.data[24],
-						rx_payload.data[25],
-						rx_payload.data[26],
-						rx_payload.data[27]);
-						
         if (flags & PAYLOAD_FLAG_EMG_UNDERFLOW) {
             esb_rx_underflow_count++;
         }
@@ -173,10 +153,22 @@ case ESB_EVENT_RX_RECEIVED:
 #endif
 
 #if defined(CONFIG_EMG_MODE)
-        esb_tb_emg_1 = TB_EMG_1;
-        esb_gt_emg_1 = GT_EMG_1;
-        esb_tb_emg_2 = TB_EMG_2;
-        esb_gt_emg_2 = GT_EMG_2;
+        esb_tb_emg_1 = bytes_to_i24_be(&rx_payload.data[12]);
+        esb_gt_emg_1 = bytes_to_i24_be(&rx_payload.data[15]);
+        esb_tb_emg_2 = bytes_to_i24_be(&rx_payload.data[18]);
+        esb_gt_emg_2 = bytes_to_i24_be(&rx_payload.data[21]);
+
+        if (rx_payload.length == BILATERAL_DATA_LENGTH) {
+            esb_r_tb_emg_1 = bytes_to_i24_be(&rx_payload.data[24]);
+            esb_r_gt_emg_1 = bytes_to_i24_be(&rx_payload.data[27]);
+            esb_r_tb_emg_2 = bytes_to_i24_be(&rx_payload.data[30]);
+            esb_r_gt_emg_2 = bytes_to_i24_be(&rx_payload.data[33]);
+        } else {
+            esb_r_tb_emg_1 = 0;
+            esb_r_gt_emg_1 = 0;
+            esb_r_tb_emg_2 = 0;
+            esb_r_gt_emg_2 = 0;
+        }
 
 		// LOG_INF("TB_EMG_1: %d, GT_EMG_1: %d", esb_tb_emg_1, esb_gt_emg_1);
 #endif
