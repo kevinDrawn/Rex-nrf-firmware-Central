@@ -18,40 +18,103 @@
 APPLICATION_BINARY_DIR:PATH=C:/ncs/Rex-nrf-firmware-Central/build
 
 //Application Source Directory
-APPLICATION_SOURCE_DIR:PATH=C:/ncs/Rex-nrf-firmware-Central
+APPLICATION_SOURCE_DIR:PATH=C:/ncs/v3.1.0/zephyr/share/sysbuild/template
 
 //No help, variable specified on the command line.
-BOARD:UNINITIALIZED=nrf21540dk/nrf52840
+APP_DIR:PATH=c:/ncs/Rex-nrf-firmware-Central
+
+//Selected board
+BOARD:STRING=nrf21540dk/nrf52840
+
+//Main board directory for board (nrf21540dk)
+BOARD_DIR:PATH=C:/ncs/v3.1.0/zephyr/boards/nordic/nrf21540dk
+
+//Support board extensions
+BOARD_EXTENSIONS:BOOL=ON
+
+//Selected board
+CACHED_BOARD:STRING=nrf21540dk/nrf52840
+
+//Selected shield
+CACHED_SHIELD:STRING=
+
+//Selected snippet
+CACHED_SNIPPET:STRING=
+
+//Enable/Disable output of compile commands during generation.
+CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON
+
+//Install path prefix, prepended onto install directories.
+CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/sysbuild_toplevel
+
+//Program used to build from build.ninja files.
+CMAKE_MAKE_PROGRAM:FILEPATH=C:/ncs/toolchains/b8b84efebd/opt/bin/ninja.exe
+
+//Value Computed by CMake
+CMAKE_PROJECT_DESCRIPTION:STATIC=
+
+//Value Computed by CMake
+CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
+
+//Value Computed by CMake
+CMAKE_PROJECT_NAME:STATIC=sysbuild_toplevel
+
+//If set, runtime paths are not added when installing shared libraries,
+// but are added when building.
+CMAKE_SKIP_INSTALL_RPATH:BOOL=NO
+
+//If set, runtime paths are not added when using shared libraries.
+CMAKE_SKIP_RPATH:BOOL=NO
+
+//If this value is on, makefiles will be generated without the
+// .SILENT directive, and all commands will be echoed to the console
+// during the make.  This is useful for debugging only. With Visual
+// Studio IDE projects all commands are done without /nologo.
+CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
 //No help, variable specified on the command line.
-BUILD_VERSION:UNINITIALIZED=emg-i24
-
-//Path to a program.
-CCACHE_FOUND:FILEPATH=CCACHE_FOUND-NOTFOUND
+CONFIG_DEBUG_THREAD_INFO:UNINITIALIZED=y
 
 //No help, variable specified on the command line.
-CMAKE_MAKE_PROGRAM:UNINITIALIZED=C:/ncs/toolchains/b8b84efebd/opt/bin/ninja.exe
+CONF_FILE:UNINITIALIZED=prj.conf
 
 //No help, variable specified on the command line.
-Python3_EXECUTABLE:UNINITIALIZED=C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe
+WEST_PYTHON:UNINITIALIZED=C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe
 
-//No help, variable specified on the command line.
-ZEPHYR_BASE:UNINITIALIZED=C:/ncs/v3.1.0/zephyr
+//Zephyr base
+ZEPHYR_BASE:PATH=C:/ncs/v3.1.0/zephyr
 
-//The directory containing a CMake configuration file for ZephyrAppConfiguration.
-ZephyrAppConfiguration_DIR:PATH=ZephyrAppConfiguration_DIR-NOTFOUND
-
-//The directory containing a CMake configuration file for ZephyrBuildConfiguration.
-ZephyrBuildConfiguration_DIR:PATH=C:/ncs/v3.1.0/nrf/share/zephyrbuild-package/cmake
+//Path to merged image in Intel Hex format
+ZEPHYR_RUNNER_CONFIG_KERNEL_HEX:STRING=
 
 //The directory containing a CMake configuration file for Zephyr.
 Zephyr_DIR:PATH=C:/ncs/v3.1.0/zephyr/share/zephyr-package/cmake
+
+//Value Computed by CMake
+sysbuild_BINARY_DIR:STATIC=C:/ncs/Rex-nrf-firmware-Central/build/_sysbuild
+
+//Value Computed by CMake
+sysbuild_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+sysbuild_SOURCE_DIR:STATIC=C:/ncs/v3.1.0/zephyr/share/sysbuild/template
+
+//Value Computed by CMake
+sysbuild_toplevel_BINARY_DIR:STATIC=C:/ncs/Rex-nrf-firmware-Central/build
+
+//Value Computed by CMake
+sysbuild_toplevel_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+sysbuild_toplevel_SOURCE_DIR:STATIC=C:/ncs/v3.1.0/zephyr/share/sysbuild
 
 
 ########################
 # INTERNAL cache entries
 ########################
 
+//List of board directories for board (nrf21540dk)
+BOARD_DIRECTORIES:INTERNAL=C:/ncs/v3.1.0/zephyr/boards/nordic/nrf21540dk
 //This is the directory where this CMakeCache.txt was created
 CMAKE_CACHEFILE_DIR:INTERNAL=c:/ncs/Rex-nrf-firmware-Central/build
 //Major version of cmake used to create the current loaded cache
@@ -66,6 +129,8 @@ CMAKE_COMMAND:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/bin/cmake.exe
 CMAKE_CPACK_COMMAND:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/bin/cpack.exe
 //Path to ctest program executable.
 CMAKE_CTEST_COMMAND:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/bin/ctest.exe
+//ADVANCED property for variable: CMAKE_EXPORT_COMPILE_COMMANDS
+CMAKE_EXPORT_COMPILE_COMMANDS-ADVANCED:INTERNAL=1
 //Name of external makefile project generator.
 CMAKE_EXTRA_GENERATOR:INTERNAL=
 //Name of generator.
@@ -78,17 +143,33 @@ CMAKE_GENERATOR_PLATFORM:INTERNAL=
 CMAKE_GENERATOR_TOOLSET:INTERNAL=
 //Source directory with the top level CMakeLists.txt file for this
 // project
-CMAKE_HOME_DIRECTORY:INTERNAL=C:/ncs/Rex-nrf-firmware-Central
+CMAKE_HOME_DIRECTORY:INTERNAL=C:/ncs/v3.1.0/zephyr/share/sysbuild
+//ADVANCED property for variable: CMAKE_MAKE_PROGRAM
+CMAKE_MAKE_PROGRAM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=1
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=9
+//Platform information initialized
+CMAKE_PLATFORM_INFO_INITIALIZED:INTERNAL=1
 //Path to CMake installation.
 CMAKE_ROOT:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/share/cmake-3.21
+//ADVANCED property for variable: CMAKE_SKIP_INSTALL_RPATH
+CMAKE_SKIP_INSTALL_RPATH-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_SKIP_RPATH
+CMAKE_SKIP_RPATH-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
+CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding Python3
 FIND_PACKAGE_MESSAGE_DETAILS_Python3:INTERNAL=[C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe][cfound components: Interpreter ][v3.12.4(3.10)]
+//Zephyr hardware model version
+HWM:INTERNAL=v2
+//Zephyr hardware model
+HWMv2:INTERNAL=True
+//nRF Connect SDK partition managere controlled hex file
+Rex-nrf-firmware-Central_NCS_RUNNER_HEX:INTERNAL=C:/ncs/Rex-nrf-firmware-Central/build/merged.hex
 //West
 WEST:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe;-m;west
 _Python3_EXECUTABLE:INTERNAL=C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe
 //Python3 Properties
-_Python3_INTERPRETER_PROPERTIES:INTERNAL=Python;3;12;4;64;;cp312-win_amd64.pyd;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib\site-packages;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib\site-packages
+_Python3_INTERPRETER_PROPERTIES:INTERNAL=Python;3;12;4;64;;cp312-win_amd64;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib\site-packages;C:\ncs\toolchains\b8b84efebd\opt\bin\Lib\site-packages
 _Python3_INTERPRETER_SIGNATURE:INTERNAL=c52fbf520bb4b5e2f3282cab2decd333
 

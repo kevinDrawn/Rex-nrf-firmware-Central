@@ -6,6 +6,7 @@
  */
 
 #include "motor_control.h"
+#include <sync_pin.h>
 
 LOG_MODULE_REGISTER(motor_control, LOG_LEVEL_INF);
 
@@ -68,6 +69,7 @@ static int16_t log_qMirror[LOG_BATCH_EXO];
 static int16_t log_torque[LOG_BATCH_EXO];
 static int16_t log_torque_can_L[LOG_BATCH_EXO];
 static int16_t log_torque_can_R[LOG_BATCH_EXO];
+static uint8_t log_sync_state[LOG_BATCH_EXO];
 
 static int32_t log_tb_emg[LOG_BATCH_EMG];
 static int32_t log_gt_emg[LOG_BATCH_EMG];
@@ -317,15 +319,17 @@ static void collect_log_samples(void)
     /* ===== 1 kHz Sampling ===== */
     if (do_sampling) {
         if (exo_sample_count < LOG_BATCH_EXO) {
-            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 100.0f);
-            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 100.0f);
-            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 100.0f);
+            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 10000.0f);
+            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 10000.0f);
+            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 10000.0f);
             log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
 
             log_torque_can_L[exo_sample_count] =
                 (int16_t)(mc.torque_can_left * 10000.0f);
             log_torque_can_R[exo_sample_count] =
                 (int16_t)(mc.torque_can_right * 10000.0f);
+            log_sync_state[exo_sample_count] =
+                (uint8_t)(sync_pin_get_state() > 0);
             exo_sample_count++;
         }
 
@@ -360,11 +364,7 @@ static void send_log_frame_if_ready(uint32_t *drop_count)
         frame[off++] = 0xAA;
         frame[off++] = 0x55;
 
-        uint16_t payload_len = 0;
-
-        payload_len += LOG_BATCH_EXO * 4 * sizeof(int16_t); // qL, qR, qMirror, torque_axis
-        payload_len += LOG_BATCH_EXO * 2 * sizeof(int16_t); // torque CAN L/R
-        payload_len += LOG_BATCH_EMG * LOG_EMG_CHANNEL * EMG_WIRE_SAMPLE_BYTES; // L/R TB/GT EMG
+        uint16_t payload_len = PAYLOAD_LEN;
 
         frame[off++] = payload_len & 0xFF;
         frame[off++] = (payload_len >> 8) & 0xFF;
@@ -385,6 +385,9 @@ static void send_log_frame_if_ready(uint32_t *drop_count)
         off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
         put_emg_i24_be(&frame[off], log_r_gt_emg);
         off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
+
+        memcpy(&frame[off], log_sync_state, sizeof(log_sync_state));
+        off += sizeof(log_sync_state);
 
         int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
         if (rc == 0) {
@@ -772,6 +775,8 @@ void Mirror_complinace_control_step(const struct device *can_dev)
 
     advance_control_state();
     collect_log_samples();
+
+    // Logging
     send_log_frame_if_ready(NULL);
 }
 

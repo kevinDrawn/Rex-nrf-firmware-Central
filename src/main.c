@@ -6,6 +6,7 @@
 #include <esb_rx.h>
 #include <adc_sampler.h>
 #include <can.h>
+#include <sync_pin.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -20,6 +21,13 @@ int main(void)
 		return 0;
 	}
 	k_busy_wait(200);
+
+	// External synchronization trigger input.
+	err = sync_pin_init();
+	if (err) {
+		LOG_ERR("Sync GPIO initialization failed, err %d", err);
+		return err;
+	}
 
 	// ESB Setting
 	err = esb_initialize();
