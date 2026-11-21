@@ -6,7 +6,7 @@ project(central_multilink_custom_nRF21540)
 
 set(KCONFIG_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Kconfig)
 
-FILE(GLOB app_sources src/*.c)
+FILE(GLOB app_sources CONFIGURE_DEPENDS src/*.c)
 target_sources(app PRIVATE ${app_sources})
 
 zephyr_library_include_directories(${ZEPHYR_BASE}/samples/bluetooth)
