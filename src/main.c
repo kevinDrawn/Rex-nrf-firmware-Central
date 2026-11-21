@@ -64,11 +64,11 @@ int main(void)
 	uint32_t prev_can_send_fail_count = 0;
 	while(true){
 		k_sleep(K_SECONDS(1));
-		uint32_t can_send_fail_count = get_can_send_fail_count();
-		LOG_INF("CAN send failed: last_1s=%u total=%u",
-			can_send_fail_count - prev_can_send_fail_count,
-			can_send_fail_count);
-		prev_can_send_fail_count = can_send_fail_count;
+		// uint32_t can_send_fail_count = get_can_send_fail_count();
+		// LOG_INF("CAN send failed: last_1s=%u total=%u",
+		// 	can_send_fail_count - prev_can_send_fail_count,
+		// 	can_send_fail_count);
+		// prev_can_send_fail_count = can_send_fail_count;
 		
 		// LOG_INF("RX=%u LOSS=%u UNDER=%u EMG_SEQ_ERR=%u",
 		// 		get_esb_rx_count(),

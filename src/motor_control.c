@@ -72,27 +72,11 @@ static int16_t log_qMirror[LOG_BATCH_EXO];
 static int16_t log_torque[LOG_BATCH_EXO];
 static int16_t log_torque_can_L[LOG_BATCH_EXO];
 static int16_t log_torque_can_R[LOG_BATCH_EXO];
+static int16_t log_q_nominal[LOG_BATCH_EXO];
+static int16_t log_q_compensation[LOG_BATCH_EXO];
 static uint8_t log_sync_state[LOG_BATCH_EXO];
 
-static int32_t log_tb_emg[LOG_BATCH_EMG];
-static int32_t log_gt_emg[LOG_BATCH_EMG];
-static int32_t log_r_tb_emg[LOG_BATCH_EMG];
-static int32_t log_r_gt_emg[LOG_BATCH_EMG];
-
-/* Keep full signed samples in RAM; serialize only their lower 24 bits. */
-static void put_emg_i24_be(uint8_t *dst, const int32_t *samples)
-{
-    for (size_t i = 0; i < LOG_BATCH_EMG; ++i) {
-        uint32_t value = (uint32_t)samples[i];
-        dst[0] = (uint8_t)(value >> 16);
-        dst[1] = (uint8_t)(value >> 8);
-        dst[2] = (uint8_t)value;
-        dst += EMG_WIRE_SAMPLE_BYTES;
-    }
-}
-
 static uint8_t exo_sample_count = 0;
-static uint8_t emg_sample_count = 0;
 
 static float power_buffer[OSC_WINDOW_SIZE];
 static int   power_sign_buffer[OSC_WINDOW_SIZE];
@@ -129,18 +113,6 @@ motor_control_state_t mc = {
     .q_dot_fixed = 0.0f,
 	.q_dot_mirror = 0.0f,
 
-	/* ============================================
-     * EMG Variables
-     * ============================================ */
-    .L_TB_1 = 0.0f,
-    .L_TB_2 = 0.0f,
-    .L_GT_1 = 0.0f,
-    .L_GT_2 = 0.0f,
-    .R_TB_1 = 0,
-    .R_GT_1 = 0,
-    .R_TB_2 = 0,
-    .R_GT_2 = 0,
-
     /* ============================================
      * Peak Detection
      * ============================================ */
@@ -169,8 +141,13 @@ motor_control_state_t mc = {
      * Torque
      * ============================================ */
     .torque_axis = 0.0f,
+    .torque_axis_filter = 0.0f,
+    
     .torque_can_left = 0.0f,
+    .torque_can_left_filter = 0.0f,
+    
     .torque_can_right = 0.0f,
+    .torque_can_right_filter = 0.0f,
     
     .torque_ext_clamp = 0.0f,
     .torque_admittance = 0.0f,
@@ -224,7 +201,7 @@ uint32_t last_log_ms = 0;
 void control_filter_init(void){
 
     // Filter 등록
-	Filter_Init(&mc.torque_axis_filter, cutoff_freqs_torque_axis, 20);
+	Filter_Init(&mc.torque_axis_lpf, cutoff_freqs_torque_axis, 20);
 	Filter_Init(&mc.motor_command_filter, cutoff_freqs_motor_command, 20);
 
 	Filter_Init(&mc.filter_L_can, cutoff_freqs_torque_axis, 20);
@@ -291,10 +268,8 @@ static inline uint32_t median_u32_k(const uint32_t *src, uint8_t n) {
     if (n > PERIOD_MED_K) n = PERIOD_MED_K;  // 최대값 제한
 
     uint32_t tmp[PERIOD_MED_K];
-
     for (uint8_t i = 0; i < n; i++)
         tmp[i] = src[i];
-
     for (uint8_t i = 1; i < n; i++) {
         uint32_t key = tmp[i];
         int j = i - 1;
@@ -314,100 +289,63 @@ static inline uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi){
     return v;
 }
 
-/* Shared by the UART test and the main control loop. */
+/* Both callers collect one sample per 1 kHz step. */
 static void collect_log_samples(void)
 {
-    bool do_sampling = ((mc.time % 1) == 0); // 1 kHz
-    /* ===== 1 kHz Sampling ===== */
-    if (do_sampling) {
-        if (exo_sample_count < LOG_BATCH_EXO) {
-            log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 10000.0f);
-            // log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 10000.0f);
-            log_qR[exo_sample_count]      = (int16_t)(mc.nominal_q * 10000.0f);
-            log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 10000.0f);
-            log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
-
-            log_torque_can_L[exo_sample_count] =
-                (int16_t)(mc.torque_can_left * 10000.0f);
-            log_torque_can_R[exo_sample_count] =
-                (int16_t)(mc.torque_can_right * 10000.0f);
-            log_sync_state[exo_sample_count] =
-                (uint8_t)(sync_pin_get_state() > 0);
-            exo_sample_count++;
-        }
-
-        if ((emg_sample_count + 1) < LOG_BATCH_EMG) {
-            log_tb_emg[emg_sample_count] = mc.L_TB_1;
-            log_gt_emg[emg_sample_count] = mc.L_GT_1;
-            log_r_tb_emg[emg_sample_count] = mc.R_TB_1;
-            log_r_gt_emg[emg_sample_count] = mc.R_GT_1;
-            emg_sample_count++;
-
-            log_tb_emg[emg_sample_count] = mc.L_TB_2;
-            log_gt_emg[emg_sample_count] = mc.L_GT_2;
-            log_r_tb_emg[emg_sample_count] = mc.R_TB_2;
-            log_r_gt_emg[emg_sample_count] = mc.R_GT_2;
-            emg_sample_count++;
-        }
+    if (exo_sample_count >= LOG_BATCH_EXO) {
+        return;
     }
+    log_qL[exo_sample_count] = (int16_t)(mc.q_L * 10000.0f);
+    log_qR[exo_sample_count] = (int16_t)(mc.q_R * 10000.0f);
+    log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 10000.0f);
+    log_torque[exo_sample_count] = (int16_t)(mc.torque_axis * 10000.0f);
+    log_torque_can_L[exo_sample_count] = (int16_t)(mc.torque_can_left * 10000.0f);
+    log_torque_can_R[exo_sample_count] = (int16_t)(mc.torque_can_right * 10000.0f);
+    log_q_nominal[exo_sample_count] = (int16_t)(mc.nominal_q * 10000.0f);
+    log_q_compensation[exo_sample_count] = (int16_t)(mc.torque_admittance * 10000.0f);
+    log_sync_state[exo_sample_count] = (uint8_t)(sync_pin_get_state() > 0);
+    exo_sample_count++;
 }
 
 static void send_log_frame_if_ready(uint32_t *drop_count)
 {
-    /* ===== 10ms 패킹 ===== */
-    if ((mc.time % 10) == 0) {
-
-        if (exo_sample_count != LOG_BATCH_EXO || emg_sample_count != LOG_BATCH_EMG) {
-            return;
-        }
-
-        uint8_t frame[FRAME_LEN];
-        size_t off = 0;
-
-        frame[off++] = 0xAA;
-        frame[off++] = 0x55;
-
-        uint16_t payload_len = PAYLOAD_LEN;
-
-        frame[off++] = payload_len & 0xFF;
-        frame[off++] = (payload_len >> 8) & 0xFF;
-
-        memcpy(&frame[off], log_qL, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qR, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_qMirror, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        memcpy(&frame[off], log_torque_can_L, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-        memcpy(&frame[off], log_torque_can_R, LOG_BATCH_EXO * sizeof(int16_t)); off += LOG_BATCH_EXO * sizeof(int16_t);
-
-        put_emg_i24_be(&frame[off], log_tb_emg);
-        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
-        put_emg_i24_be(&frame[off], log_gt_emg);
-        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
-        put_emg_i24_be(&frame[off], log_r_tb_emg);
-        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
-        put_emg_i24_be(&frame[off], log_r_gt_emg);
-        off += LOG_BATCH_EMG * EMG_WIRE_SAMPLE_BYTES;
-
-        memcpy(&frame[off], log_sync_state, sizeof(log_sync_state));
-        off += sizeof(log_sync_state);
-
-        int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
-        if (rc == 0) {
-            uart_tx_kick();
-        } else {
-            // UART TX queue full
-            if (drop_count != NULL) {
-                (*drop_count)++;
-                if ((*drop_count % 100) == 1) {
-                    LOG_WRN("UART TX queue full, dropped=%d", *drop_count);
-                }
-            }
-        }
-
-        exo_sample_count = 0;
-        emg_sample_count = 0;
+    if ((mc.time % 10) != 0 || exo_sample_count != LOG_BATCH_EXO) {
+        return;
     }
+
+    uint8_t frame[FRAME_LEN];
+    size_t off = 0;
+
+    frame[off++] = 0xAA;
+    frame[off++] = 0x55;
+
+    const uint16_t payload_len = PAYLOAD_LEN;
+    frame[off++] = payload_len & 0xFF;
+    frame[off++] = (payload_len >> 8) & 0xFF;
+
+    const int16_t *const channels[] = {
+        log_qL, log_qR, log_qMirror, log_torque, log_torque_can_L, log_torque_can_R,
+        log_q_nominal, log_q_compensation,
+    };
+
+    BUILD_ASSERT(ARRAY_SIZE(channels) == LOG_EXO_CHANNEL);
+    for (size_t i = 0; i < ARRAY_SIZE(channels); i++) {
+        memcpy(&frame[off], channels[i], sizeof(log_qL));
+        off += sizeof(log_qL);
+    }
+    memcpy(&frame[off], log_sync_state, sizeof(log_sync_state));
+
+    int rc = k_msgq_put(&uart_tx_q, frame, K_NO_WAIT);
+    if (rc == 0) {
+        uart_tx_kick();
+    } else if (drop_count != NULL) {
+        (*drop_count)++;
+        if ((*drop_count % 100) == 1) {
+            LOG_WRN("UART TX queue full, dropped=%d", *drop_count);
+        }
+    }
+
+    exo_sample_count = 0;
 }
 
 void UART_Test_step(void){
@@ -426,16 +364,6 @@ void UART_Test_step(void){
     mc.torque_axis      = 0;
     mc.torque_can_left = esb_torque_L;
     mc.torque_can_right = esb_torque_R;
-
-    // EMG
-    mc.L_TB_1 =  esb_tb_emg_1;
-    mc.L_GT_1 =  esb_gt_emg_1;
-    mc.L_TB_2 =  esb_tb_emg_2;
-    mc.L_GT_2 =  esb_gt_emg_2;
-    mc.R_TB_1 = esb_r_tb_emg_1;
-    mc.R_GT_1 = esb_r_gt_emg_1;
-    mc.R_TB_2 = esb_r_tb_emg_2;
-    mc.R_GT_2 = esb_r_gt_emg_2;
 
     mc.time += (int)(SAMPLING_INTERVAL * 1000);
     collect_log_samples();
@@ -463,55 +391,48 @@ static void update_control_sensors(void)
     //     mc.q_R = deg2rad(50);
 
     mc.torque_can_left = esb_torque_L;
-    mc.torque_can_left = Filter_Low_pass(&mc.filter_L_can, mc.torque_can_left);
-    mc.torque_can_left = 0;
+    // mc.torque_can_left_filter = Filter_Low_pass(&mc.filter_L_can, mc.torque_can_left);
 
     mc.torque_can_right = esb_torque_R;
-    mc.torque_can_right = Filter_Low_pass(&mc.filter_R_can, mc.torque_can_right);
+    // mc.torque_can_right_filter = Filter_Low_pass(&mc.filter_R_can, mc.torque_can_right);
 
     mc.torque_axis = torque_f;
     mc.torque_axis = Measured_Torque_axis(mc.torque_axis);
-    mc.torque_axis = Filter_Low_pass(&mc.torque_axis_filter, mc.torque_axis);
-
-    // EMG
-    mc.L_TB_1 =  esb_tb_emg_1;
-    mc.L_GT_1 =  esb_gt_emg_1;
-    
-    mc.L_TB_2 =  esb_tb_emg_2;
-    mc.L_GT_2 =  esb_gt_emg_2;
-    mc.R_TB_1 = esb_r_tb_emg_1;
-    mc.R_GT_1 = esb_r_gt_emg_1;
-    mc.R_TB_2 = esb_r_tb_emg_2;
-    mc.R_GT_2 = esb_r_gt_emg_2;
-    
+    mc.torque_axis_filter = Filter_Low_pass(&mc.torque_axis_lpf, mc.torque_axis);
 }
 
 static void prepare_compliance_state(void)
 {
     // // Compliance
-    // float torque_scale = esb_torque_L * 1.0;
+    float torque_scale = esb_torque_L * 1.0;
+    Nominal_I = 2 * (1e-6f);
+    Nominal_C = 5 * (1e-4f);
+    Nominal_K = 15 * (1e-3f);
+ 
     // Nominal_I = 2 * (1e-6f);
     // Nominal_C = 5 * (1e-4f);
     // Nominal_K = 10 * (1e-3f);
-    // Kp = 3000;
-    // Kv = 15;
-    // Raw 조건
+
+    Kp = 3500;
+    Kv = 60;
+ 
+    // Low gain PD [기본]
     // Kp = 2500;
     // Kv = 15;
 
     // High gain - Lidocaine
-    float torque_scale = esb_torque_L * 2.0;
-    Nominal_I = 1 * (1e-5f);
-    Nominal_C = 1 * (1e-3f);
-    Nominal_K = 30 * (1e-3f);    
-    Kp = 1500;
-    Kv = 30;
+    // float torque_scale = mc.torque_can_left * 2.0;
+    // Nominal_I = 1 * (1e-5f);
+    // Nominal_C = 1 * (1e-3f);
+    // Nominal_K = 30 * (1e-3f);    
+    // Kp = 1500;
+    // Kv = 30;
 
     torque_scale = Filter_Low_pass(&mc.filter_scale, torque_scale);
 
     // Cantilever torque command
-	// mc.torque_ext_clamp = (fabsf(torque_scale) < torque_clamp) ? 0 : torque_scale;
-    mc.torque_ext_clamp = 0;
+	mc.torque_ext_clamp = (fabsf(torque_scale) < torque_clamp) ? 0 : torque_scale;
+    // mc.torque_ext_clamp = 0;
 
 	/* 속도 계산 */
     mc.q_dot_L = (mc.q_L - mc.q_prev_L) / SAMPLING_INTERVAL;
@@ -519,7 +440,6 @@ static void prepare_compliance_state(void)
 
     Filter_Low_pass(&mc.dot_filter_L, mc.q_dot_L);
     Filter_Low_pass(&mc.dot_filter_R, mc.q_dot_R);
-
 }
 
 static void update_control_initialization(void)

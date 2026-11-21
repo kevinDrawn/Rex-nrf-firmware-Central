@@ -12,18 +12,25 @@ still lose entire batches.
 
 ## UART format
 
-Offsets exclude the four-byte header. Existing fields retain their encoding.
+Offsets start at the payload. Each channel is sampled at 1 kHz and packed
+as a separate block of 10 samples. The signed blocks use little-endian int16
+values scaled by 10000.
 
-| Payload offset | Field | Encoding |
+| Payload offset | Field | Source or encoding |
 | --- | --- | --- |
-| 0-119 | Six EXO blocks | 10 int16 samples per block, little endian |
-| 120-359 | Four EMG blocks | 20 signed 24-bit samples per block, big endian |
-| 360-369 | `sync_state` | 10 uint8 samples: 0=Low, 1=High |
+| 0-19 | `qL` | `mc.q_L` |
+| 20-39 | `qR` | `mc.q_R` |
+| 40-59 | `qMirror` | `mc.q_mirror` |
+| 60-79 | `torque_axis` | `mc.torque_axis` |
+| 80-99 | `torque_can_L` | `mc.torque_can_left` |
+| 100-119 | `torque_can_R` | `mc.torque_can_right` |
+| 120-139 | `q_nominal` | `mc.nominal_q` |
+| 140-159 | `q_compensation` | `mc.torque_admittance` |
+| 160-169 | `sync_state` | 10 uint8 samples, 0=Low and 1=High |
 
-Header: `AA 55 72 01` (370-byte payload, little-endian length).
-Total frame size: 374 bytes, every 10 ms. State samples align by index with
-EXO samples. Update the PC parser to accept this length and save a
-`sync_state` column. The PC receiver is not included in this repository.
+The header is `AA 55 AA 00`, with a 170-byte payload length in little-endian
+order. The 174-byte frame is sent every 10 ms. All blocks align by sample
+index. The PC parser must accept the 170-byte payload and decode this layout.
 
 ## Hardware check
 

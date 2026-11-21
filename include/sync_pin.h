@@ -2,9 +2,9 @@
 
 #include <zephyr/drivers/gpio.h>
 
-/* External active-high trigger: P0.04, idle low. */
+/* External active-high trigger: P0.03, idle low. */
 #define SYNC_PIN_PORT_NODE DT_NODELABEL(gpio0)
-#define SYNC_PIN_NUMBER 4U
+#define SYNC_PIN_NUMBER 3U
 #define SYNC_PIN_INPUT_FLAGS (GPIO_INPUT | GPIO_PULL_DOWN)
 
 int sync_pin_init(void);

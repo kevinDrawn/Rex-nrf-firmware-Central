@@ -40,7 +40,7 @@
 
 // Nominal Boundary
 #define MAX_ACC_NOMINAL 300 // rad/s^2
-#define theta_min_axial deg2rad(50)
+#define theta_min_axial deg2rad(45)
 #define theta_max_axial deg2rad(130)
 
 // Acceleration Boundary Algorithm
@@ -149,10 +149,7 @@ extern float Nominal_K;
 
 // Logging Parameter
 #define LOG_BATCH_EXO      10   // 1 kHz * 10 ms
-#define LOG_BATCH_EMG      20   // 2 kHz * 10 ms
-
-#define LOG_EXO_CHANNEL    6    // qL, qR, qMirror, torque_axis, torque_can_L, torque_can_R
-#define LOG_EMG_CHANNEL    4    // L_TB, L_GT, R_TB, R_GT
+#define LOG_EXO_CHANNEL    8    // int16_t blocks packed by send_log_frame_if_ready()
 
 #if defined(CONFIG_CONTRALATERAL_MODE)
 // Gait Trajectory
@@ -174,12 +171,6 @@ typedef struct
     float q_L, q_R, q_mirror, q_fixed;
     float q_prev_L, q_prev_R, q_prev_mirror, q_prev_q_fixed;
     float q_dot_L, q_dot_R, q_dot_mirror, q_dot_fixed;
-
-    /* ============================================
-     * EMG Variables
-     * ============================================ */
-    int32_t L_TB_1, L_TB_2, L_GT_1, L_GT_2;
-    int32_t R_TB_1, R_TB_2, R_GT_1, R_GT_2;
 
     /* ============================================
      * Peak Detection (Right Joint)
@@ -212,10 +203,15 @@ typedef struct
      * Torque Variables
      * ============================================ */
     float torque_axis;
+    float torque_axis_filter;
     float torque_ext_clamp;
     float torque_admittance;
+
     float torque_can_left;
     float torque_can_right;
+    
+    float torque_can_left_filter;
+    float torque_can_right_filter;
     
     /* ============================================
      * Nominal Plant State
@@ -262,7 +258,7 @@ typedef struct
     int32_t time;
     int32_t time_start;
 
-    Filter torque_axis_filter;
+    Filter torque_axis_lpf;
     Filter motor_command_filter;
     Filter dot_filter_L;
     Filter dot_filter_R;
