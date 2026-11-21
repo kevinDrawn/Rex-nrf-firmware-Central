@@ -12,6 +12,23 @@
     compatible = "nordic,nrf-uarte";
 };
 
+/* Release UART0 RTS (P0.05); external sync uses P0.03. */
+&uart0_default {
+    group1 {
+        psels = <NRF_PSEL(UART_TX, 0, 6)>;
+    };
+    group2 {
+        psels = <NRF_PSEL(UART_RX, 0, 8)>;
+    };
+};
+
+&uart0_sleep {
+    group1 {
+        psels = <NRF_PSEL(UART_TX, 0, 6)>,
+                <NRF_PSEL(UART_RX, 0, 8)>;
+    };
+};
+
 &spi0 {
     compatible = "nordic,nrf-spi";
     status = "okay";

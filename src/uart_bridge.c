@@ -10,7 +10,6 @@ const struct device *uart_dev;
 
 /* UART TX 큐 */
 K_MSGQ_DEFINE(uart_tx_q, FRAME_LEN, 64, 4);
-
 static void uart_evt_cb(const struct device *dev,
                         struct uart_event *evt,
                         void *user_data)

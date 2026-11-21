@@ -62,6 +62,9 @@ float x_increment = 0.0;
 float x = 0.0;
 float Gait_output = 0.0;
 
+int16_t	Kp = 0.0;
+int16_t	Kv = 0.0;
+
 // Logging Buffer
 static int16_t log_qL[LOG_BATCH_EXO];
 static int16_t log_qR[LOG_BATCH_EXO];
@@ -315,12 +318,12 @@ static inline uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi){
 static void collect_log_samples(void)
 {
     bool do_sampling = ((mc.time % 1) == 0); // 1 kHz
-
     /* ===== 1 kHz Sampling ===== */
     if (do_sampling) {
         if (exo_sample_count < LOG_BATCH_EXO) {
             log_qL[exo_sample_count]      = (int16_t)(mc.q_L * 10000.0f);
-            log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 10000.0f);
+            // log_qR[exo_sample_count]      = (int16_t)(mc.q_R * 10000.0f);
+            log_qR[exo_sample_count]      = (int16_t)(mc.nominal_q * 10000.0f);
             log_qMirror[exo_sample_count] = (int16_t)(mc.q_mirror * 10000.0f);
             log_torque[exo_sample_count]  = (int16_t)(mc.torque_axis * 10000.0f);
 
@@ -461,6 +464,7 @@ static void update_control_sensors(void)
 
     mc.torque_can_left = esb_torque_L;
     mc.torque_can_left = Filter_Low_pass(&mc.filter_L_can, mc.torque_can_left);
+    mc.torque_can_left = 0;
 
     mc.torque_can_right = esb_torque_R;
     mc.torque_can_right = Filter_Low_pass(&mc.filter_R_can, mc.torque_can_right);
@@ -485,17 +489,24 @@ static void update_control_sensors(void)
 static void prepare_compliance_state(void)
 {
     // // Compliance
-    float torque_scale = esb_torque_L * 1.0;
-    Nominal_I = 2 * (1e-6f);
-    Nominal_C = 5 * (1e-4f);
-    Nominal_K = 10 * (1e-3f);
+    // float torque_scale = esb_torque_L * 1.0;
+    // Nominal_I = 2 * (1e-6f);
+    // Nominal_C = 5 * (1e-4f);
+    // Nominal_K = 10 * (1e-3f);
+    // Kp = 3000;
+    // Kv = 15;
+    // Raw 조건
+    // Kp = 2500;
+    // Kv = 15;
 
     // High gain - Lidocaine
-    // float torque_scale = esb_torque_L * 2.0;
-    // Nominal_I = 1 * (1e-5f);
-    // Nominal_C = 1 * (1e-3f);
-    // Nominal_K = 30 * (1e-3f);
-    
+    float torque_scale = esb_torque_L * 2.0;
+    Nominal_I = 1 * (1e-5f);
+    Nominal_C = 1 * (1e-3f);
+    Nominal_K = 30 * (1e-3f);    
+    Kp = 1500;
+    Kv = 30;
+
     torque_scale = Filter_Low_pass(&mc.filter_scale, torque_scale);
 
     // Cantilever torque command
@@ -527,20 +538,20 @@ static void update_control_initialization(void)
 static float compute_control_velocity(void)
 {
 #if defined(CONFIG_CONTRALATERAL_MODE)
-    // // Motor Control - Trajectory Mode
-    // float df = f_target - f_cur;
-    // float df_limit = DF_MAX_PER_SEC * dt;
-    // if (df >  df_limit) df =  df_limit;
-    // if (df < -df_limit) df = -df_limit;
-    // f_cur += df;
-    // float x_increment = (100.0 * f_cur) * SAMPLING_INTERVAL;
-    // x += x_increment;
-    // if (x > 100.0) x -= 100.0;     // [103 - 100] => 3 + x_increment
-    // // float Gait_output = generate_trajectory(x); // deg
-    // float Gait_output = generate_trajectory(x, RAT_TAG_12);
+    // Motor Control - Trajectory Mode
+    float df = f_target - f_cur;
+    float df_limit = DF_MAX_PER_SEC * dt;
+    if (df >  df_limit) df =  df_limit;
+    if (df < -df_limit) df = -df_limit;
+    f_cur += df;
+    float x_increment = (100.0 * f_cur) * SAMPLING_INTERVAL;
+    x += x_increment;
+    if (x > 100.0) x -= 100.0;     // [103 - 100] => 3 + x_increment
+    // float Gait_output = generate_trajectory(x); // deg
+    float Gait_output = generate_trajectory(x, RAT_TAG_5);
 
-    // mc.q_R = deg2rad(Gait_output);
-    // mc.q_dot_R = (mc.q_R - mc.q_prev_R) / SAMPLING_INTERVAL;
+    mc.q_R = deg2rad(Gait_output);
+    mc.q_dot_R = (mc.q_R - mc.q_prev_R) / SAMPLING_INTERVAL;
 
 	// Sign State after Hysteresis
 	bool vel_pos_now_r = (mc.q_dot_R > +VEL_HYST_RAD_S);
@@ -744,7 +755,6 @@ static void send_motor_command(float command_vel_float)
         // pack_pdo_CSV(&tx, COB_ID_PDO3_RX + 1, 0);  // velocity = 200 rpm
 	    // send_frame(&tx);   // 너가 이미 만든 can_send() 래퍼
     }
-
 }
 
 static void advance_control_state(void)

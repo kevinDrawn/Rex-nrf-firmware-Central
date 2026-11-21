@@ -132,9 +132,10 @@ case ESB_EVENT_RX_RECEIVED:
         esb_qR = deg2rad((float) R_Raw / 100.0f);
 
 		// Print raw data
+		// LOG_INF("%d %d", L_Raw, R_Raw);
+
 		// int16_t norm_qL = (float) L_Raw / 100.0f;
         // int16_t norm_qR = (float) R_Raw / 100.0f;
-		// LOG_INF("%d %d", L_Raw, R_Raw);
 		// LOG_INF("%d %d", norm_qL, norm_qR);
 #endif
 

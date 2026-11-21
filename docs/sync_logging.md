@@ -1,8 +1,9 @@
 # External sync input
 
-`include/sync_pin.h` defines P0.05 as an active-high input with an internal
+`include/sync_pin.h` defines P0.03 as an active-high input with an internal
 pull-down. `main()` calls `sync_pin_init()` before reception and sampling.
-The nRF21540 DK overlay releases P0.05 from UART0 RTS; UART0 uses TX/RX only.
+P0.03 is the external sync input. The nRF21540 DK overlay releases P0.05
+from UART0 RTS; UART0 uses TX/RX only.
 
 Each 1 kHz EXO sample reads the physical level: `sync_state=0` for Low and
 `sync_state=1` for High. There is no interrupt, event latch, or debounce.

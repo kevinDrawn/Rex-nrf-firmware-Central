@@ -66,14 +66,6 @@
 #define K_adm 2 // 2
 #define mirror_bias deg2rad(0)
 
-/* Robust Gain */
-#define	Kp 1500
-#define	Kv 30
-
-// /* Compliance Gain */
-// #define	Kp 2500
-// #define	Kv 15
-
 extern float Nominal_I;
 extern float Nominal_C;
 extern float Nominal_K;
@@ -143,7 +135,6 @@ extern float Nominal_K;
 #define PEAK_DIFF_THRESH    deg2rad(10.0f)   // 직전 Peak(+ -)과 이번에 감지된 Peak(+ -) 사이 높이 제한 threshold 인접한 peak의 작은 봉우리 제거 목적
 
 #define offset_regression_a    0.43f
-// #define offset_regression_b	   0.00f // Sec
 #define offset_regression_b	   -0.05f
 
 // Sine Trajectory
@@ -165,9 +156,9 @@ extern float Nominal_K;
 
 #if defined(CONFIG_CONTRALATERAL_MODE)
 // Gait Trajectory
-#define f_target 1
+#define f_target 3
 #elif defined(CONFIG_FIXED_MODE)
-#define f_target 2
+#define f_target 1
 #endif
 
 typedef struct

@@ -79,6 +79,12 @@ CONFIG_DEBUG_THREAD_INFO:UNINITIALIZED=y
 CONF_FILE:UNINITIALIZED=prj.conf
 
 //No help, variable specified on the command line.
+DEBUG_THREAD_INFO:UNINITIALIZED=On
+
+//No help, variable specified on the command line.
+Rex-nrf-firmware-Central_DEBUG_THREAD_INFO:UNINITIALIZED=On
+
+//No help, variable specified on the command line.
 WEST_PYTHON:UNINITIALIZED=C:/ncs/toolchains/b8b84efebd/opt/bin/python.exe
 
 //Zephyr base
